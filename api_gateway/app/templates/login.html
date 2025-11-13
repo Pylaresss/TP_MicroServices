@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Connexion</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Connexion</h1>
+      {% if error %}<p class="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="{{ url_for('login') }}">
+        <div class="row">
+          <input id="username" name="username" placeholder="Utilisateur (ex: alice, bob, john)" required>
+        </div>
+        <div class="row">
+          <input id="password" name="password" type="password" placeholder="Mot de passe" required>
+        </div>
+        <button type="submit">Login</button>
+        <p class="muted">Comptes de test : kilian/123, bob/456</p>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

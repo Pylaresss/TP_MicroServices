@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Historique d'achats</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Historique d'achats de {{ username }}</h1>
+
+        <p>
+            <a href="{{ url_for('shop') }}">← Retour à la boutique</a>
+        </p>
+
+        {% if orders %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Commande #</th>
+                        <th>Article</th>
+                        <th>Prix</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                        {% set article = articles_by_id.get(order.article_id) %}
+                        <tr>
+                            <td>{{ order.id }}</td>
+                            <td>
+                                {% if article %}
+                                    {{ article.nom }} ({{ order.article_id }})
+                                {% else %}
+                                    {{ order.article_id }}
+                                {% endif %}
+                            </td>
+                            <td>{{ "%.2f"|format(order.prix) }} €</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>Vous n'avez encore passé aucune commande.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

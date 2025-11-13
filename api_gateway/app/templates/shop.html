@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Boutique</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <p>
+          Bonjour {{ username }} |
+          <a href="{{ url_for('history') }}">Voir mon historique</a>
+      </p>
+
+      <h1>Bonjour {{ username }} </h1>
+
+      {% with msgs = get_flashed_messages() %}
+        {% if msgs %}
+          <ul>
+            {% for m in msgs %}
+              <li class="alert">{{ m }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      {% if achats and achats|length > 0 %}
+        <h2>Vos achats précédents</h2>
+        <ul class="list">
+          {% for a in achats %}
+            <li>
+              <div><strong>{{ a.nom }}</strong></div>
+              <div class="price">{{ "%.2f"|format(a.prix) }} €</div>
+            </li>
+          {% endfor %}
+        </ul>
+        <hr>
+      {% endif %}
+
+      <h2>Articles</h2>
+      <ul class="list">
+        {% for a in articles %}
+          <li>
+            <div>
+              <strong>{{ a.nom }}</strong>
+              <div class="price">{{ "%.2f"|format(a.prix) }} €</div>
+            </div>
+            <form method="post" action="{{ url_for('acheter', article_id=a.id) }}">
+              <button type="submit">Acheter</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

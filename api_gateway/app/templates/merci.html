@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Récapitulatif</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Merci pour votre achat !</h1>
+      <p class="success">Merci d’avoir acheté l’article <strong>{{ article.nom }}</strong>, {{ username }}.</p>
+      <p><a href="{{ url_for('shop') }}">Continuer les achats</a></p>
+    </div>
+  </div>
+</body>
+</html>
