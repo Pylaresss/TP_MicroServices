@@ -4,6 +4,7 @@ import datetime
 import jwt
 import requests
 
+
 USER_SERVICE_URL = "http://127.0.0.1:5002"
 
 
@@ -40,7 +41,7 @@ def login():
         return jsonify({"error": "invalid credentials"}), 401
 
     token = create_jwt(username)
-    return jsonify({"token": token})
+    return jsonify({"token": token}), 200
 
 
 @app.post("/auth/verify")
@@ -56,8 +57,43 @@ def verify():
             app.config["JWT_SECRET"],
             algorithms=["HS256"],
         )
-        return jsonify({"valid": True, "payload": payload})
+        return jsonify({"valid": True, "payload": payload}), 200
     except jwt.ExpiredSignatureError:
-        return jsonify({"valid": False, "reason": "expired"})
+        return jsonify({"valid": False, "reason": "expired"}), 401
     except jwt.InvalidTokenError:
-        return jsonify({"valid": False, "reason": "invalid"})
+        return jsonify({"valid": False, "reason": "invalid"}), 401
+
+
+# 🔥 NOUVEL ENDPOINT POUR RAFRAÎCHIR LE TOKEN
+@app.post("/auth/refresh")
+def refresh():
+    data = request.json or {}
+    old_token = data.get("token")
+
+    if not old_token:
+        return jsonify({"error": "missing token"}), 400
+
+    try:
+        # On décode l'ancien token (s'il est encore valide)
+        payload = jwt.decode(
+            old_token,
+            app.config["JWT_SECRET"],
+            algorithms=["HS256"],
+        )
+    except jwt.ExpiredSignatureError:
+        # Token déjà expiré → obligé de se reconnecter
+        return jsonify({"error": "expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "invalid"}), 401
+
+    username = payload.get("sub")
+    if not username:
+        return jsonify({"error": "invalid payload"}), 400
+
+    # On génère un NOUVEAU token avec une nouvelle expiration
+    new_token = create_jwt(username)
+
+    return jsonify({
+        "token": new_token,
+        "message": "token refreshed",
+    }), 200
