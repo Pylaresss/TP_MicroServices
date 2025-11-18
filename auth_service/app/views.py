@@ -1,7 +1,7 @@
 from flask import request, jsonify
 from app import app
-import datetime
-import jwt
+import time
+from authlib.jose import jwt, JoseError
 import requests
 
 
@@ -9,12 +9,18 @@ USER_SERVICE_URL = "http://127.0.0.1:5002"
 
 
 def create_jwt(username: str) -> str:
+    """
+    Génère un JWT avec Authlib, valable 1 heure.
+    """
+    header = {"alg": "HS256", "typ": "JWT"}
     payload = {
         "sub": username,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
+        "exp": int(time.time()) + 3600,  # expiration dans 1h (timestamp)
     }
-    token = jwt.encode(payload, app.config["JWT_SECRET"], algorithm="HS256")
-    return token
+
+    token_bytes = jwt.encode(header, payload, app.config["JWT_SECRET"])
+    # Authlib renvoie des bytes -> on convertit en str
+    return token_bytes.decode("utf-8")
 
 
 @app.get("/")
@@ -52,19 +58,19 @@ def verify():
         return jsonify({"valid": False, "reason": "missing token"}), 400
 
     try:
-        payload = jwt.decode(
+        claims = jwt.decode(
             token,
             app.config["JWT_SECRET"],
-            algorithms=["HS256"],
         )
-        return jsonify({"valid": True, "payload": payload}), 200
-    except jwt.ExpiredSignatureError:
-        return jsonify({"valid": False, "reason": "expired"}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({"valid": False, "reason": "invalid"}), 401
+        # Vérifie exp, etc.
+        claims.validate()
+        # claims est un objet Claims -> on le cast en dict pour jsonify
+        return jsonify({"valid": True, "payload": dict(claims)}), 200
+    except JoseError as e:
+        # Toute erreur (signature, expiration, format...)
+        return jsonify({"valid": False, "reason": str(e)}), 401
 
 
-# 🔥 NOUVEL ENDPOINT POUR RAFRAÎCHIR LE TOKEN
 @app.post("/auth/refresh")
 def refresh():
     data = request.json or {}
@@ -74,19 +80,18 @@ def refresh():
         return jsonify({"error": "missing token"}), 400
 
     try:
-        # On décode l'ancien token (s'il est encore valide)
-        payload = jwt.decode(
+        # On décode l'ancien token
+        claims = jwt.decode(
             old_token,
             app.config["JWT_SECRET"],
-            algorithms=["HS256"],
         )
-    except jwt.ExpiredSignatureError:
-        # Token déjà expiré → obligé de se reconnecter
-        return jsonify({"error": "expired"}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({"error": "invalid"}), 401
+        # Si exp est dépassé, ça lèvera ici
+        claims.validate()
+    except JoseError as e:
+        # Token déjà expiré ou invalide -> obligé de se reconnecter
+        return jsonify({"error": str(e)}), 401
 
-    username = payload.get("sub")
+    username = claims.get("sub")
     if not username:
         return jsonify({"error": "invalid payload"}), 400
 

@@ -1,7 +1,7 @@
 from app import app
 from flask import render_template, request, redirect, url_for, session, abort, flash
 import requests
-import jwt
+from authlib.jose import jwt, JoseError
 
 
 AUTH_SERVICE_URL = "http://127.0.0.1:5001"
@@ -27,13 +27,14 @@ def get_current_user():
     if not token:
         return None
     try:
-        payload = jwt.decode(
+        claims = jwt.decode(
             token,
             app.config["JWT_SECRET"],
-            algorithms=["HS256"],
         )
-        return payload["sub"]
-    except Exception:
+        # Vérifie exp, etc.
+        claims.validate()
+        return claims.get("sub")
+    except JoseError:
         return None
 
 
@@ -91,7 +92,7 @@ def shop():
         "shop.html",
         username=user,
         articles=ARTICLES,
-        token=token           # On l'envoie au template
+        token=token           # On l'envoie au template (si tu veux l'afficher)
     )
 
 
@@ -109,13 +110,15 @@ def acheter(article_id):
     headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     try:
-        r = requests.post(f"{ORDERS_SERVICE_URL}/orders",
-                          json={
-                              "username": user,
-                              "article_id": article["id"],
-                              "prix": article["prix"],
-                          },
-                          headers=headers)
+        r = requests.post(
+            f"{ORDERS_SERVICE_URL}/orders",
+            json={
+                "username": user,
+                "article_id": article["id"],
+                "prix": article["prix"],
+            },
+            headers=headers
+        )
     except requests.exceptions.RequestException:
         flash("Erreur lors de la création de la commande.")
         return redirect(url_for("shop"))
@@ -139,6 +142,7 @@ def merci(article_id):
 
     return render_template("merci.html", username=user, article=article)
 
+
 @app.route("/history")
 def history():
     user = get_current_user()
@@ -146,8 +150,10 @@ def history():
         return redirect(url_for("login"))
 
     try:
-        r = requests.get(f"{ORDERS_SERVICE_URL}/orders",
-                         params={"username": user})
+        r = requests.get(
+            f"{ORDERS_SERVICE_URL}/orders",
+            params={"username": user}
+        )
         orders = r.json() if r.status_code == 200 else []
     except requests.exceptions.RequestException:
         orders = []
