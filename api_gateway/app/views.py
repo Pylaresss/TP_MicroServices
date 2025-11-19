@@ -1,8 +1,7 @@
 from app import app
 from flask import render_template, request, redirect, url_for, session, abort, flash
 import requests
-from authlib.jose import jwt, JoseError
-
+from functools import wraps
 
 AUTH_SERVICE_URL = "http://127.0.0.1:5001"
 ORDERS_SERVICE_URL = "http://127.0.0.1:5003"
@@ -22,25 +21,93 @@ def get_article(article_id):
     return None
 
 
-def get_current_user():
-    token = session.get("token")
-    if not token:
-        return None
+def verify_access_token(access_token: str):
+    """
+    Demande à Auth Service si l'access token est encore valide (STATEFUL).
+    Retourne le payload (claims) si valide, None sinon.
+    """
     try:
-        claims = jwt.decode(
-            token,
-            app.config["JWT_SECRET"],
+        r = requests.post(
+            f"{AUTH_SERVICE_URL}/auth/verify",
+            json={"token": access_token},
+            timeout=3,
         )
-        # Vérifie exp, etc.
-        claims.validate()
-        return claims.get("sub")
-    except JoseError:
+    except requests.exceptions.RequestException:
         return None
+
+    if r.status_code != 200:
+        return None
+
+    data = r.json()
+    if not data.get("valid"):
+        return None
+
+    return data.get("payload") or {}
+
+
+def get_current_user():
+    """
+    Récupère l'utilisateur courant en interrogeant Auth Service.
+    Si l'access token est invalide/expiré, tente de le rafraîchir avec le refresh token.
+    """
+    access_token = session.get("access_token")
+    refresh_token = session.get("refresh_token")
+
+    if not access_token:
+        return None
+
+    # 1) On demande d'abord à Auth Service de vérifier l'access token
+    claims = verify_access_token(access_token)
+    if claims is not None:
+        return claims.get("sub")
+
+    # 2) Access token invalide → on tente un refresh si on a un refresh token
+    if not refresh_token:
+        return None
+
+    try:
+        r = requests.post(
+            f"{AUTH_SERVICE_URL}/auth/refresh",
+            json={"refresh_token": refresh_token},
+            timeout=3,
+        )
+    except requests.exceptions.RequestException:
+        return None
+
+    if r.status_code != 200:
+        return None
+
+    data = r.json()
+    new_access = data.get("access_token")
+    new_refresh = data.get("refresh_token")
+
+    if not new_access or not new_refresh:
+        return None
+
+    # On met à jour la session avec les nouveaux tokens
+    session["access_token"] = new_access
+    session["refresh_token"] = new_refresh
+
+    # On redemande à /auth/verify pour récupérer les claims
+    claims = verify_access_token(new_access)
+    if claims is None:
+        return None
+
+    return claims.get("sub")
+
+
+def login_required(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = get_current_user()
+        if not user:
+            return redirect(url_for("login"))
+        return f(user=user, *args, **kwargs)
+    return wrapper
 
 
 @app.route("/")
 def index():
-    # redirige vers login par défaut
     return redirect(url_for("login"))
 
 
@@ -58,7 +125,7 @@ def login():
         error = "Veuillez remplir tous les champs."
         return render_template("login.html", error=error)
 
-    # Appel à l'Auth Service pour obtenir le JWT
+    # Appel Auth Service → obtenir access + refresh tokens
     try:
         r = requests.post(f"{AUTH_SERVICE_URL}/auth/login", json={
             "username": username,
@@ -72,42 +139,43 @@ def login():
         error = "Identifiants invalides."
         return render_template("login.html", error=error)
 
-    token = r.json()["token"]
-    print("TOKEN RECU :", token)
+    data = r.json()
+    access_token = data.get("access_token")
+    refresh_token = data.get("refresh_token")
 
-    session["token"] = token
+    if not access_token or not refresh_token:
+        error = "Réponse d'authentification invalide."
+        return render_template("login.html", error=error)
+
+    session["access_token"] = access_token
+    session["refresh_token"] = refresh_token
+
     flash("Connexion réussie.")
     return redirect(url_for("shop"))
 
 
 @app.route("/shop")
-def shop():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for("login"))
-
-    token = session.get("token")   # On récupère le JWT
+@login_required
+def shop(user):
+    access_token = session.get("access_token")
 
     return render_template(
         "shop.html",
         username=user,
         articles=ARTICLES,
-        token=token           # On l'envoie au template (si tu veux l'afficher)
+        token=access_token,  # si tu veux encore l'afficher
     )
 
 
 @app.post("/acheter/<article_id>")
-def acheter(article_id):
-    user = get_current_user()
-    if not user:
-        return redirect(url_for("login"))
-
+@login_required
+def acheter(user, article_id):
     article = get_article(article_id)
     if not article:
         abort(404)
 
-    token = session.get("token")
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    access_token = session.get("access_token")
+    headers = {"Authorization": f"Bearer {access_token}"} if access_token else {}
 
     try:
         r = requests.post(
@@ -131,11 +199,8 @@ def acheter(article_id):
 
 
 @app.route("/merci/<article_id>")
-def merci(article_id):
-    user = get_current_user()
-    if not user:
-        return redirect(url_for("login"))
-
+@login_required
+def merci(user, article_id):
     article = get_article(article_id)
     if not article:
         abort(404)
@@ -144,11 +209,8 @@ def merci(article_id):
 
 
 @app.route("/history")
-def history():
-    user = get_current_user()
-    if not user:
-        return redirect(url_for("login"))
-
+@login_required
+def history(user):
     try:
         r = requests.get(
             f"{ORDERS_SERVICE_URL}/orders",

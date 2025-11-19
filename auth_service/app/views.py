@@ -1,26 +1,61 @@
 from flask import request, jsonify
 from app import app
 import time
-from authlib.jose import jwt, JoseError
 import requests
-
+from authlib.jose import jwt, JoseError
 
 USER_SERVICE_URL = "http://127.0.0.1:5002"
 
+# 🧠 Stockage en mémoire des tokens valides (STATEFUL)
+VALID_ACCESS_TOKENS = set()
+VALID_REFRESH_TOKENS = set()
 
-def create_jwt(username: str) -> str:
+
+def create_access_token(username: str) -> str:
     """
-    Génère un JWT avec Authlib, valable 1 heure.
+    Génère un ACCESS TOKEN (courte durée) pour accéder aux ressources protégées.
+    Et l'enregistre dans la liste des tokens valides (stateful).
     """
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
         "sub": username,
-        "exp": int(time.time()) + 3600,  # expiration dans 1h (timestamp)
+        "type": "access",
+        "exp": int(time.time()) + 900,  # 15 minutes
     }
 
-    token_bytes = jwt.encode(header, payload, app.config["JWT_SECRET"])
-    # Authlib renvoie des bytes -> on convertit en str
-    return token_bytes.decode("utf-8")
+    token_bytes = jwt.encode(
+        header,
+        payload,
+        app.config["JWT_SECRET"],
+    )
+    token = token_bytes.decode("utf-8")
+
+    # On enregistre ce token comme valide côté serveur
+    VALID_ACCESS_TOKENS.add(token)
+    return token
+
+
+def create_refresh_token(username: str) -> str:
+    """
+    Génère un REFRESH TOKEN (longue durée) pour obtenir de nouveaux access tokens.
+    Lui aussi est enregistré côté serveur (stateful).
+    """
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "sub": username,
+        "type": "refresh",
+        "exp": int(time.time()) + 7 * 24 * 3600,  # 7 jours
+    }
+
+    token_bytes = jwt.encode(
+        header,
+        payload,
+        app.config["JWT_SECRET"],
+    )
+    token = token_bytes.decode("utf-8")
+
+    VALID_REFRESH_TOKENS.add(token)
+    return token
 
 
 @app.get("/")
@@ -37,7 +72,7 @@ def login():
     if not username or not password:
         return jsonify({"error": "missing fields"}), 400
 
-    # Vérification via user_service
+    # Vérification via User Service
     r = requests.post(f"{USER_SERVICE_URL}/users/check_credentials", json={
         "username": username,
         "password": password,
@@ -46,59 +81,84 @@ def login():
     if r.status_code != 200:
         return jsonify({"error": "invalid credentials"}), 401
 
-    token = create_jwt(username)
-    return jsonify({"token": token}), 200
+    access_token = create_access_token(username)
+    refresh_token = create_refresh_token(username)
+
+    return jsonify({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }), 200
 
 
 @app.post("/auth/verify")
 def verify():
+    """
+    Vérifie un ACCESS TOKEN :
+    - signature + exp via Authlib
+    - présence dans VALID_ACCESS_TOKENS (stateful)
+    """
     data = request.json or {}
     token = data.get("token")
     if not token:
         return jsonify({"valid": False, "reason": "missing token"}), 400
 
+    # Vérifie d'abord s'il est encore dans la liste des tokens valides
+    if token not in VALID_ACCESS_TOKENS:
+        return jsonify({"valid": False, "reason": "revoked or unknown"}), 401
+
     try:
-        claims = jwt.decode(
-            token,
-            app.config["JWT_SECRET"],
-        )
-        # Vérifie exp, etc.
+        claims = jwt.decode(token, app.config["JWT_SECRET"])
         claims.validate()
-        # claims est un objet Claims -> on le cast en dict pour jsonify
-        return jsonify({"valid": True, "payload": dict(claims)}), 200
+
+        if claims.get("type") != "access":
+            return jsonify({"valid": False, "reason": "wrong token type"}), 401
+
+        return jsonify({
+            "valid": True,
+            "payload": dict(claims),
+        }), 200
     except JoseError as e:
-        # Toute erreur (signature, expiration, format...)
         return jsonify({"valid": False, "reason": str(e)}), 401
 
 
 @app.post("/auth/refresh")
 def refresh():
+    """
+    Prend un REFRESH TOKEN valide, présent dans VALID_REFRESH_TOKENS,
+    et renvoie un nouveau couple (access_token, refresh_token).
+    """
     data = request.json or {}
-    old_token = data.get("token")
+    refresh_token = data.get("refresh_token")
 
-    if not old_token:
-        return jsonify({"error": "missing token"}), 400
+    if not refresh_token:
+        return jsonify({"error": "missing refresh_token"}), 400
+
+    # Vérifie s'il est encore marqué comme valide côté serveur
+    if refresh_token not in VALID_REFRESH_TOKENS:
+        return jsonify({"error": "revoked or unknown refresh token"}), 401
 
     try:
-        # On décode l'ancien token
-        claims = jwt.decode(
-            old_token,
-            app.config["JWT_SECRET"],
-        )
-        # Si exp est dépassé, ça lèvera ici
+        claims = jwt.decode(refresh_token, app.config["JWT_SECRET"])
         claims.validate()
     except JoseError as e:
-        # Token déjà expiré ou invalide -> obligé de se reconnecter
         return jsonify({"error": str(e)}), 401
+
+    if claims.get("type") != "refresh":
+        return jsonify({"error": "wrong token type"}), 401
 
     username = claims.get("sub")
     if not username:
         return jsonify({"error": "invalid payload"}), 400
 
-    # On génère un NOUVEAU token avec une nouvelle expiration
-    new_token = create_jwt(username)
+    # Rotation des refresh tokens : on invalide l'ancien
+    VALID_REFRESH_TOKENS.discard(refresh_token)
+
+    # On génère un nouveau couple de tokens
+    new_access = create_access_token(username)
+    new_refresh = create_refresh_token(username)
 
     return jsonify({
-        "token": new_token,
-        "message": "token refreshed",
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "message": "tokens refreshed",
     }), 200
