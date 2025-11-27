@@ -2,9 +2,11 @@ from app import app
 from flask import render_template, request, redirect, url_for, session, abort, flash
 import requests
 from functools import wraps
+import os
 
-AUTH_SERVICE_URL = "http://127.0.0.1:5001"
-ORDERS_SERVICE_URL = "http://127.0.0.1:5003"
+
+AUTH_SERVICE_URL = os.environ.get("AUTH_SERVICE_URL", "http://127.0.0.1:5001")
+ORDERS_SERVICE_URL = os.environ.get("ORDERS_SERVICE_URL", "http://127.0.0.1:5003")
 
 # Catalogue d’articles affiché dans shop.html
 ARTICLES = [

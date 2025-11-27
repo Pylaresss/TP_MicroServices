@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  api_gateway:
+    build:
+      context: ./api_gateway
+    container_name: api_gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - AUTH_SERVICE_URL=http://auth_service:5001
+      - ORDERS_SERVICE_URL=http://orders_service:5003
+    depends_on:
+      - auth_service
+      - orders_service
+
+  auth_service:
+    build:
+      context: ./auth_service
+    container_name: auth_service
+    ports:
+      - "5001:5001"
+    environment:
+      - USER_SERVICE_URL=http://user_service:5002
+
+  user_service:
+    build:
+      context: ./user_service
+    container_name: user_service
+    ports:
+      - "5002:5002"
+    volumes:
+      - user_data:/app/app/data   # pour persister la base sqlite
+
+  orders_service:
+    build:
+      context: ./orders_service
+    container_name: orders_service
+    ports:
+      - "5003:5003"
+
+volumes:
+  user_data:

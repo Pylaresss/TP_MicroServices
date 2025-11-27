@@ -3,8 +3,9 @@ from app import app
 import time
 import requests
 from authlib.jose import jwt, JoseError
+import os
 
-USER_SERVICE_URL = "http://127.0.0.1:5002"
+USER_SERVICE_URL = os.environ.get("USER_SERVICE_URL", "http://127.0.0.1:5002")
 
 # 🧠 Stockage en mémoire des tokens valides (STATEFUL)
 VALID_ACCESS_TOKENS = set()
