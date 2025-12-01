@@ -6,12 +6,27 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <div class="container">
-    <div class="card">
-      <h1>Merci pour votre achat !</h1>
-      <p class="success">Merci d’avoir acheté l’article <strong>{{ article.nom }}</strong>, {{ username }}.</p>
-      <p><a href="{{ url_for('shop') }}">Continuer les achats</a></p>
+  <!-- Sapin animé en arrière-plan -->
+  <div id="fixed-bg">
+    <canvas id="tree"></canvas>
+    <canvas id="snowflakes"></canvas>
+  </div>
+
+  <!-- Ton contenu au-dessus -->
+  <div id="main-content">
+    <div class="container">
+      <div class="card">
+        <h1>Merci pour votre achat !</h1>
+        <p class="success">
+          Merci d’avoir acheté l’article <strong>{{ article.nom }}</strong>, {{ username }}.
+        </p>
+        <p><a href="{{ url_for('shop') }}">Continuer les achats</a></p>
+      </div>
     </div>
   </div>
+
+  <!-- Script pour l’animation du sapin -->
+  <script src="{{ url_for('static', filename='tree.js') }}"></script>
+  <script src="{{ url_for('static', filename='snowflakes.js') }}"></script>
 </body>
 </html>

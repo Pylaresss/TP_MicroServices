@@ -44,3 +44,113 @@ ul.list li{
 .success{color:#166534; margin:8px 0;}
 a{color:var(--primary); text-decoration:none;}
 a:hover{text-decoration:underline;}
+
+/* ---- Sapin en fond ---- */
+
+html, body{
+  /* tu peux garder background:var(--bg) si tu veux un fond clair,
+     ou le remplacer par un fond nuit : */
+  background:#050814;
+}
+
+/* Conteneur du fond */
+#fixed-bg {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  height: 100vh;
+  z-index: 0; /* en dessous du contenu */
+}
+
+/* Canvas du sapin */
+#tree {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 70vmin;
+  height: 70vmin;
+  display: block;
+}
+
+/* Ton contenu au-dessus du sapin */
+#main-content {
+  position: relative;
+  z-index: 1;
+}
+
+
+
+/* ---- Fond animé (sapin, neige, etc.) ---- */
+
+/* fixe le fond sur toute la fenêtre */
+#fixed-bg {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  height: 100vh;
+  z-index: 0; /* derrière le contenu */
+}
+
+/* canvas utilisé pour la neige sur la page de connexion */
+#snow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+/* ton contenu par-dessus le fond animé */
+#main-content {
+  position: relative;
+  z-index: 1;
+}
+
+
+#snowflakes {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2; /* entre le sapin et ton contenu */
+  pointer-events: none;
+}
+
+/* Mode sombre pour pages avec fond nuit */
+.dark-page {
+  color: #ffffff; /* texte blanc */
+}
+
+.dark-page a {
+  color: #93c5fd; /* bleu clair lisible */
+}
+
+.dark-page h1,
+.dark-page h2,
+.dark-page h3 {
+  color: #ffffff;
+}
+
+.dark-page table {
+  color: #e5e7eb; /* gris clair */
+}
+
+.dark-page .price {
+  color: #cbd5e1; /* gris bleu clair */
+}
+
+.dark-page .alert {
+  color: #f87171; /* rouge clair lisible */
+}
+
+.dark-page .success {
+  color: #4ade80; /* vert clair lisible */
+}
