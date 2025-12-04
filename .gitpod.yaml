@@ -1,0 +1,12 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - name: Terraform Init
+    command: terraform init && terraform apply -auto-approve
+
+ports:
+  - port: 8080
+    onOpen: open-preview
+  - port: 5000
+    onOpen: open-preview
